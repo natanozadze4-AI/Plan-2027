@@ -10,7 +10,7 @@ const fmt=(n,d=0)=>Number(n).toLocaleString("ru-RU",{minimumFractionDigits:d,max
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const DEFAULT_PARAMS={year:2027,weights:[0.25,0.2,0.15,0.1,0.2,0.1],high:3.6,med:2.6,freq:{hi:1,mid:2,lo:3},fte:6,daysPerFte:210,productive:0.75,reserveAdhoc:0.15,reserveFollow:0.1};
 let S={params:DEFAULT_PARAMS,processes:[]};
-let session=null, loading=true, busy=false, pending=0, saveError="", lastSaved=null, loginError="", loginBusy=false;
+let loading=true, busy=false, pending=0, saveError="", lastSaved=null;
 let tab="overview", sortKey="score", filterCat="", query="", heatSel=null, confirmDel=null;
 try{const t=localStorage.getItem("iap-tab"); if(t) tab=t;}catch(e){}
 
@@ -262,31 +262,16 @@ function vSetup(){
   <p>Не заданы переменные окружения <code>VITE_SUPABASE_URL</code> и <code>VITE_SUPABASE_ANON_KEY</code>.</p>
   <p class="small muted">Локально: скопируйте <code>.env.example</code> в <code>.env</code>. На Vercel: Settings → Environment Variables, затем Redeploy.</p></div></div>`;
 }
-function vLogin(){
-  return `<div class="wrap"><div class="panel login">
-    <div class="brand"><small>Служба внутреннего аудита</small><h1>План внутреннего аудита</h1></div>
-    <form id="login">
-      <div class="field"><label for="em">Эл. почта</label><input type="email" id="em" autocomplete="username" required></div>
-      <div class="field"><label for="pw">Пароль</label><input type="password" id="pw" autocomplete="current-password" required></div>
-      ${loginError?`<p class="warn" style="margin:0">${esc(loginError)}</p>`:""}
-      <button class="btn primary" type="submit" ${loginBusy?"disabled":""}>${loginBusy?"Вход…":"Войти"}</button>
-    </form>
-    <p class="small muted" style="margin:0">Доступ выдаёт администратор через Supabase.</p>
-  </div></div>`;
-}
-
 function render(){
   const app=document.getElementById("app");
   if(!configured){app.innerHTML=vSetup();return;}
-  if(!session){const em=document.getElementById("em")?.value||"";app.innerHTML=vLogin();const e=document.getElementById("em");if(e&&em)e.value=em;return;}
   if(loading){app.innerHTML=`<div class="wrap"><p class="muted">Загрузка данных…</p></div>`;return;}
   const E=evaluate();
   const st=saveError?"Ошибка: "+saveError:pending?"Сохранение…":lastSaved?"Сохранено в "+lastSaved.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}):"Изменения сохраняются автоматически";
   const view=tab==="register"?vRegister(E):tab==="heat"?vHeat(E):tab==="plan"?vPlan(E):tab==="params"?vParams():vOverview(E);
   app.innerHTML=`<div class="wrap">
     <header class="top"><div class="brand"><small>Служба внутреннего аудита · банк</small><h1>План внутреннего аудита ${S.params.year}</h1></div>
-      <div class="actions"><span class="status ${saveError?"err":pending?"dirty":""}" role="status">${esc(st)}</span>
-      <span class="user">${esc(session.user.email)}</span><button class="btn" id="logout">Выйти</button></div></header>
+      <div class="actions"><span class="status ${saveError?"err":pending?"dirty":""}" role="status">${esc(st)}</span></div></header>
     ${confirmDel?`<div class="note toolbar" style="justify-content:space-between"><span>Удалить «${esc(S.processes.find(p=>p.id===confirmDel)?.name)}» из реестра?</span><span class="toolbar"><button class="btn" id="delYes">Удалить</button><button class="btn" id="delNo">Отмена</button></span></div>`:""}
     ${!S.processes.length?`<div class="note">Реестр пуст. Добавьте процессы на вкладке «Оценка рисков» или выполните <code>supabase/seed.sql</code> для примера.</div>`:""}
     <nav class="tabs" role="tablist">${TABS.map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${tab===k}">${k==="plan"?"План "+S.params.year:t}</button>`).join("")}</nav>
@@ -296,15 +281,8 @@ function render(){
 
 /* ---------- события ---------- */
 const byId=id=>S.processes.find(p=>p.id===Number(id));
-document.addEventListener("submit",async e=>{
-  if(e.target.id!=="login")return; e.preventDefault();
-  const email=document.getElementById("em").value.trim(), password=document.getElementById("pw").value;
-  loginBusy=true;loginError="";render();
-  const {error}=await supabase.auth.signInWithPassword({email,password});
-  loginBusy=false; if(error){loginError=error.message==="Invalid login credentials"?"Неверная почта или пароль.":error.message;render();}
-});
 document.addEventListener("click",e=>{
-  const t=e.target.closest("[data-tab],[data-del],[data-cell],#add,#hclr,#csv,#logout,#delYes,#delNo");if(!t)return;
+  const t=e.target.closest("[data-tab],[data-del],[data-cell],#add,#hclr,#csv,#delYes,#delNo");if(!t)return;
   if(t.dataset.tab){tab=t.dataset.tab;try{localStorage.setItem("iap-tab",tab)}catch(_){ }render();}
   else if(t.dataset.del){confirmDel=Number(t.dataset.del);render();window.scrollTo({top:0,behavior:"smooth"});}
   else if(t.id==="delYes") deleteProcess(confirmDel);
@@ -313,7 +291,6 @@ document.addEventListener("click",e=>{
   else if(t.id==="hclr"){heatSel=null;render();}
   else if(t.id==="add") addProcess();
   else if(t.id==="csv") exportCsv();
-  else if(t.id==="logout") supabase.auth.signOut();
 });
 document.addEventListener("input",e=>{const t=e.target;
   if(t.id==="q"){query=t.value;const pos=t.selectionStart;render();const n=document.getElementById("q");n.focus();n.setSelectionRange(pos,pos);}
@@ -341,11 +318,4 @@ document.addEventListener("change",e=>{const t=e.target;
 
 /* ---------- запуск ---------- */
 render();
-if(configured){
-  supabase.auth.getSession().then(({data})=>{session=data.session;if(session)loadAll();else render();});
-  supabase.auth.onAuthStateChange((_ev,s)=>{
-    const was=session?.user?.id; session=s;
-    if(s&&s.user.id!==was) loadAll();
-    if(!s){S.processes=[];render();}
-  });
-}
+if(configured) loadAll();

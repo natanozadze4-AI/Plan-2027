@@ -59,14 +59,14 @@ drop trigger if exists trg_settings_touch on public.settings;
 create trigger trg_settings_touch before update on public.settings
   for each row execute function public.touch_row();
 
--- 4. Row Level Security: доступ только для вошедших пользователей
+-- 4. Row Level Security: открытый доступ без входа (anon + authenticated)
 alter table public.settings  enable row level security;
 alter table public.processes enable row level security;
 
 drop policy if exists "auth read settings"   on public.settings;
 drop policy if exists "auth update settings" on public.settings;
-create policy "auth read settings"   on public.settings for select to authenticated using (true);
-create policy "auth update settings" on public.settings for update to authenticated using (true) with check (true);
+create policy "auth read settings"   on public.settings for select to anon, authenticated using (true);
+create policy "auth update settings" on public.settings for update to anon, authenticated using (true) with check (true);
 
 drop policy if exists "auth all processes" on public.processes;
-create policy "auth all processes" on public.processes for all to authenticated using (true) with check (true);
+create policy "auth all processes" on public.processes for all to anon, authenticated using (true) with check (true);
